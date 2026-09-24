@@ -1,8 +1,7 @@
-import 'package:basecamp/main.dart';
-import 'package:basecamp/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'test_app.dart';
 
 void main() {
   testWidgets('GPS coordinates entered with hemispheres are saved', (
@@ -11,10 +10,8 @@ void main() {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
-    SharedPreferences.setMockInitialValues({});
-    final store = TripStore();
-    await store.load();
-    await tester.pumpWidget(BasecampApp(store: store));
+    final (app, store, _) = await makeTestApp();
+    await tester.pumpWidget(app);
     await tester.tap(find.text('Big Sur Weekend'));
     await tester.pumpAndSettle();
 

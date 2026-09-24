@@ -5,20 +5,31 @@ import 'package:flutter/material.dart';
 import 'platform/safe_insets.dart';
 
 import 'screens/home_screen.dart';
+import 'services/auth_service.dart';
+import 'services/settings_service.dart';
 import 'store.dart';
 import 'util.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = TripStore();
-  await store.load();
-  runApp(BasecampApp(store: store));
+  final auth = LocalAuthService();
+  final settings = SettingsService();
+  await Future.wait([store.load(), auth.load(), settings.load()]);
+  runApp(BasecampApp(store: store, auth: auth, settings: settings));
 }
 
 class BasecampApp extends StatelessWidget {
-  const BasecampApp({super.key, required this.store});
+  const BasecampApp({
+    super.key,
+    required this.store,
+    required this.auth,
+    required this.settings,
+  });
 
   final TripStore store;
+  final AuthService auth;
+  final SettingsService settings;
 
   static const forest = Color(0xFF2F5D48);
 
@@ -78,13 +89,23 @@ class BasecampApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return StoreScope(
       store: store,
-      child: MaterialApp(
-        title: 'Basecamp',
-        debugShowCheckedModeBanner: false,
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
-        builder: (context, child) => _withHostInsets(context, child!),
-        home: const HomeScreen(),
+      child: AuthScope(
+        auth: auth,
+        child: SettingsScope(
+          settings: settings,
+          child: ListenableBuilder(
+            listenable: settings,
+            builder: (context, _) => MaterialApp(
+              title: 'Basecamp',
+              debugShowCheckedModeBanner: false,
+              theme: _theme(Brightness.light),
+              darkTheme: _theme(Brightness.dark),
+              themeMode: settings.themeMode,
+              builder: (context, child) => _withHostInsets(context, child!),
+              home: const HomeScreen(),
+            ),
+          ),
+        ),
       ),
     );
   }

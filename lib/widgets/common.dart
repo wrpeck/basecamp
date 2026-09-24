@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import 'form_sheet.dart';
 
-class SectionCard extends StatelessWidget {
+class SectionCard extends StatefulWidget {
   const SectionCard({
     super.key,
     required this.title,
@@ -12,6 +12,9 @@ class SectionCard extends StatelessWidget {
     this.onEdit,
     this.onHeaderTap,
     this.trailing,
+    this.collapsible = false,
+    this.initiallyExpanded = true,
+    this.badge,
   });
 
   final String title;
@@ -19,22 +22,41 @@ class SectionCard extends StatelessWidget {
   final Widget child;
   final VoidCallback? onEdit;
 
-  /// Called when the header row is tapped. Defaults to [onEdit].
+  /// Called when the header row is tapped. Defaults to [onEdit], or to
+  /// toggling the section when [collapsible].
   final VoidCallback? onHeaderTap;
   final Widget? trailing;
+
+  /// Lets the user fold the section away by tapping its header.
+  final bool collapsible;
+  final bool initiallyExpanded;
+
+  /// Short text shown next to the title, e.g. an item count.
+  final String? badge;
+
+  @override
+  State<SectionCard> createState() => _SectionCardState();
+}
+
+class _SectionCardState extends State<SectionCard> {
+  late bool _expanded = widget.initiallyExpanded;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final expanded = !widget.collapsible || _expanded;
+    final onTap = widget.collapsible
+        ? () => setState(() => _expanded = !_expanded)
+        : widget.onHeaderTap ?? widget.onEdit;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+        padding: EdgeInsets.fromLTRB(16, 8, 8, expanded ? 16 : 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: onHeaderTap ?? onEdit,
+              onTap: onTap,
               child: Row(
                 children: [
                   Container(
@@ -44,35 +66,113 @@ class SectionCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      icon,
+                      widget.icon,
                       size: 18,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.title,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (widget.badge != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              widget.badge!,
+                              style: theme.textTheme.labelMedium,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  ?trailing,
-                  if (onEdit != null)
+                  ?widget.trailing,
+                  if (widget.onEdit != null)
                     IconButton(
-                      tooltip: 'Edit $title',
+                      tooltip: 'Edit ${widget.title}',
                       icon: const Icon(Icons.edit_outlined, size: 20),
-                      onPressed: onEdit,
+                      onPressed: widget.onEdit,
+                    )
+                  else if (widget.collapsible)
+                    IconButton(
+                      tooltip: _expanded ? 'Collapse' : 'Expand',
+                      icon: AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: const Icon(Icons.expand_more),
+                      ),
+                      onPressed: onTap,
                     )
                   else
                     const SizedBox(height: 48),
                 ],
               ),
             ),
-            const SizedBox(height: 4),
-            Padding(padding: const EdgeInsets.only(right: 8), child: child),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              alignment: Alignment.topCenter,
+              child: expanded
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 4, right: 8),
+                      child: widget.child,
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Marks gear as belonging to someone's own list or to the group.
+class ScopeTag extends StatelessWidget {
+  const ScopeTag({super.key, required this.personal, this.owner});
+
+  final bool personal;
+
+  /// Whose personal list, when it isn't the viewer's.
+  final String? owner;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final label = personal
+        ? (owner == null ? 'MINE' : owner!.toUpperCase())
+        : 'GROUP';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: personal ? scheme.secondaryContainer : scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          letterSpacing: 1,
+          fontWeight: FontWeight.w700,
+          color: personal
+              ? scheme.onSecondaryContainer
+              : scheme.onTertiaryContainer,
         ),
       ),
     );

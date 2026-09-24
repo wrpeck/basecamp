@@ -35,8 +35,16 @@ class CamperScreen extends StatelessWidget {
             ? a.day.compareTo(b.day)
             : mealTypes.indexOf(a.type).compareTo(mealTypes.indexOf(b.type)),
       );
-    final bringing = trip.gear.where((g) => g.bringerId == c.id).toList();
-    final forThem = trip.gear.where((g) => g.forIds.contains(c.id)).toList();
+    final bringing = trip.gear
+        .where((g) => !g.personal && g.bringerId == c.id)
+        .toList();
+    final forThem = trip.gear
+        .where((g) => !g.personal && g.forIds.contains(c.id))
+        .toList();
+    final ownList = trip.gear
+        .where((g) => g.personal && g.bringerId == c.id)
+        .toList();
+    final ownPacked = ownList.where((g) => g.packed).length;
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
@@ -210,6 +218,7 @@ class CamperScreen extends StatelessWidget {
           SectionCard(
             title: 'Money',
             icon: Icons.account_balance_wallet_outlined,
+            collapsible: true,
             child: Column(
               children: [
                 Row(
@@ -251,6 +260,8 @@ class CamperScreen extends StatelessWidget {
           SectionCard(
             title: 'Paid for',
             icon: Icons.receipt_long_outlined,
+            collapsible: true,
+            badge: '${paid.length}',
             child: Column(
               children: [
                 if (paid.isEmpty) none('Hasn\'t paid for anything yet'),
@@ -272,6 +283,8 @@ class CamperScreen extends StatelessWidget {
           SectionCard(
             title: 'Cooking',
             icon: Icons.outdoor_grill_outlined,
+            collapsible: true,
+            badge: '${meals.length}',
             child: Column(
               children: [
                 if (meals.isEmpty) none('Not cooking any meals'),
@@ -289,11 +302,13 @@ class CamperScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Bringing',
+            title: 'Bringing for the group',
             icon: Icons.local_shipping_outlined,
+            collapsible: true,
+            badge: '${bringing.length}',
             child: Column(
               children: [
-                if (bringing.isEmpty) none('Not bringing any gear'),
+                if (bringing.isEmpty) none('Not bringing any group gear'),
                 for (final g in bringing)
                   row(
                     g.quantity > 1 ? '${g.name} ×${g.quantity}' : g.name,
@@ -310,11 +325,41 @@ class CamperScreen extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: c.isMe ? 'My packing list' : 'Personal packing list',
+            icon: Icons.backpack_outlined,
+            collapsible: true,
+            badge: '$ownPacked/${ownList.length}',
+            child: Column(
+              children: [
+                if (ownList.isEmpty) none('No personal items yet'),
+                for (final g in ownList)
+                  row(
+                    g.quantity > 1 ? '${g.name} ×${g.quantity}' : g.name,
+                    [g.category, if (g.packed) 'packed'].join(' · '),
+                    null,
+                    () => editGear(context, trip, g),
+                    icon: g.packed ? Icons.check_circle : gearIcon(g.category),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => editGear(context, trip, null, true, c.id),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add personal item'),
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (forThem.isNotEmpty) ...[
             const SizedBox(height: 12),
             SectionCard(
-              title: 'Gear just for ${c.isMe ? 'me' : c.firstName}',
-              icon: Icons.backpack_outlined,
+              title: 'Group gear set aside for ${c.isMe ? 'me' : c.firstName}',
+              icon: Icons.bookmark_outline,
+              collapsible: true,
+              badge: '${forThem.length}',
               child: Column(
                 children: [
                   for (final g in forThem)
@@ -322,7 +367,7 @@ class CamperScreen extends StatelessWidget {
                       g.quantity > 1 ? '${g.name} ×${g.quantity}' : g.name,
                       trip.camper(g.bringerId) == null
                           ? 'Nobody bringing it yet'
-                          : 'Bringing: ${trip.camper(g.bringerId)!.firstName}',
+                          : 'Bringing: ${who(trip, g.bringerId, capitalize: true)}',
                       null,
                       () => editGear(context, trip, g),
                       icon: gearIcon(g.category),

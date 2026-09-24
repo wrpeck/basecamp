@@ -164,12 +164,6 @@ Trip sampleTrip() {
         bringerId: me.id,
       ),
       GearItem(
-        name: 'Camp chair',
-        category: 'Fun',
-        bringerId: me.id,
-        forIds: [me.id],
-      ),
-      GearItem(
         name: 'Sleeping bags',
         category: 'Sleep',
         quantity: 4,
@@ -194,8 +188,6 @@ Trip sampleTrip() {
         bringerId: sam.id,
       ),
       GearItem(name: 'Water jugs (5 gal)', category: 'Kitchen', quantity: 2),
-      GearItem(name: 'Rain jackets', category: 'Clothing'),
-      GearItem(name: 'Warm layers', category: 'Clothing'),
       GearItem(
         name: 'First aid kit',
         category: 'Safety',
@@ -206,13 +198,27 @@ Trip sampleTrip() {
       GearItem(name: 'Bear-proof food bin', category: 'Safety'),
       GearItem(name: 'Hatchet', category: 'Tools', bringerId: sam.id),
       GearItem(name: 'Sunscreen & bug spray', category: 'Personal'),
-      GearItem(
+      GearItem(name: 'Card games', category: 'Fun', bringerId: riley.id),
+      GearItem(name: 'Firewood bundles', category: 'Kitchen', quantity: 3),
+      // My own packing list.
+      GearItem.personalFor(me.id, name: 'Camp chair', category: 'Fun'),
+      GearItem.personalFor(me.id, name: 'Hiking boots', category: 'Clothing'),
+      GearItem.personalFor(
+        me.id,
+        name: 'Underwear & socks',
+        category: 'Clothing',
+        quantity: 3,
+        packed: true,
+      ),
+      GearItem.personalFor(me.id, name: 'Rain jacket', category: 'Clothing'),
+      GearItem.personalFor(me.id, name: 'Warm layers', category: 'Clothing'),
+      GearItem.personalFor(me.id, name: 'Toiletries', packed: true),
+      GearItem.personalFor(me.id, name: 'Water bottle', category: 'Kitchen'),
+      GearItem.personalFor(
+        riley.id,
         name: 'Peanut-free snacks',
         category: 'Personal',
-        bringerId: riley.id,
-        forIds: [riley.id],
       ),
-      GearItem(name: 'Card games', category: 'Fun', bringerId: riley.id),
     ],
     activities: [
       Activity(
@@ -264,3 +270,40 @@ Trip sampleTrip() {
     ],
   );
 }
+
+/// Packing lists every new install starts with. Users can edit or delete
+/// them and add their own.
+List<GearTemplate> defaultGearTemplates() => [
+  GearTemplate(
+    name: 'Camping essentials',
+    items: [
+      TemplateItem(name: 'Tent', category: 'Shelter'),
+      TemplateItem(name: 'Stove & fuel', category: 'Kitchen'),
+      TemplateItem(name: 'Lighter / matches', category: 'Kitchen'),
+      TemplateItem(name: 'Cooler', category: 'Kitchen'),
+      TemplateItem(name: 'Water jugs', category: 'Kitchen'),
+      TemplateItem(name: 'Firewood', category: 'Kitchen'),
+      TemplateItem(name: 'First aid kit', category: 'Safety'),
+      TemplateItem(name: 'Map & compass', category: 'Safety'),
+      TemplateItem(name: 'Knife / multi-tool', category: 'Tools'),
+      TemplateItem(name: 'Sunscreen', category: 'Personal'),
+    ],
+  ),
+  GearTemplate(
+    name: 'My personal basics',
+    items: [
+      TemplateItem(name: 'Sleeping bag', category: 'Sleep', personal: true),
+      TemplateItem(name: 'Sleeping pad', category: 'Sleep', personal: true),
+      TemplateItem(name: 'Headlamp', category: 'Safety', personal: true),
+      TemplateItem(name: 'Rain jacket', category: 'Clothing', personal: true),
+      TemplateItem(name: 'Hiking boots', category: 'Clothing', personal: true),
+      TemplateItem(
+        name: 'Underwear & socks',
+        category: 'Clothing',
+        personal: true,
+      ),
+      TemplateItem(name: 'Toiletries', category: 'Personal', personal: true),
+      TemplateItem(name: 'Water bottle', category: 'Kitchen', personal: true),
+    ],
+  ),
+];

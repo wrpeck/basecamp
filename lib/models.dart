@@ -206,20 +206,46 @@ class GearItem {
     this.category = 'Other',
     this.quantity = 1,
     this.packed = false,
+    this.personal = false,
     this.bringerId = '',
     List<String>? forIds,
   }) : id = id ?? newId(),
        forIds = forIds ?? [];
+
+  /// A personal item on [ownerId]'s own packing list.
+  GearItem.personalFor(
+    String ownerId, {
+    required String name,
+    String category = 'Personal',
+    int quantity = 1,
+    bool packed = false,
+  }) : this(
+         name: name,
+         category: category,
+         quantity: quantity,
+         packed: packed,
+         personal: true,
+         bringerId: ownerId,
+         forIds: [ownerId],
+       );
 
   final String id;
   String name;
   String category;
   int quantity;
   bool packed;
+
+  /// Personal gear (boots, toothbrush) rather than shared group gear
+  /// (stove, firewood). Personal items belong to [bringerId].
+  bool personal;
+
+  /// Who is providing the item; empty when nobody has claimed it yet.
   String bringerId;
 
   /// Who the item is for. Empty means anyone can use it.
   List<String> forIds;
+
+  String get ownerId => personal ? bringerId : '';
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -227,18 +253,88 @@ class GearItem {
     'category': category,
     'quantity': quantity,
     'packed': packed,
+    'personal': personal,
     'bringerId': bringerId,
     'forIds': forIds,
   };
 
-  factory GearItem.fromJson(Map<String, dynamic> j) => GearItem(
+  factory GearItem.fromJson(Map<String, dynamic> j) {
+    final bringerId = (j['bringerId'] ?? '') as String;
+    final forIds = _strings(j['forIds']);
+    return GearItem(
+      id: j['id'],
+      name: j['name'] ?? '',
+      category: j['category'] ?? 'Other',
+      quantity: j['quantity'] ?? 1,
+      packed: j['packed'] ?? false,
+      // Before group/personal gear existed, "brought by me, just for me"
+      // was how a personal item was expressed.
+      personal:
+          j['personal'] ??
+          (bringerId.isNotEmpty &&
+              forIds.length == 1 &&
+              forIds.first == bringerId),
+      bringerId: bringerId,
+      forIds: forIds,
+    );
+  }
+}
+
+/// A reusable packing list the user manages, e.g. "Camping essentials".
+/// Lists live outside any trip and can be applied to any trip's gear.
+class GearTemplate {
+  GearTemplate({String? id, required this.name, List<TemplateItem>? items})
+    : id = id ?? newId(),
+      items = items ?? [];
+
+  final String id;
+  String name;
+  List<TemplateItem> items;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'items': items.map((i) => i.toJson()).toList(),
+  };
+
+  factory GearTemplate.fromJson(Map<String, dynamic> j) => GearTemplate(
+    id: j['id'],
+    name: j['name'] ?? '',
+    items: ((j['items'] as List?) ?? const [])
+        .map((e) => TemplateItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList(),
+  );
+}
+
+class TemplateItem {
+  TemplateItem({
+    String? id,
+    required this.name,
+    this.category = 'Other',
+    this.quantity = 1,
+    this.personal = false,
+  }) : id = id ?? newId();
+
+  final String id;
+  String name;
+  String category;
+  int quantity;
+  bool personal;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'category': category,
+    'quantity': quantity,
+    'personal': personal,
+  };
+
+  factory TemplateItem.fromJson(Map<String, dynamic> j) => TemplateItem(
     id: j['id'],
     name: j['name'] ?? '',
     category: j['category'] ?? 'Other',
     quantity: j['quantity'] ?? 1,
-    packed: j['packed'] ?? false,
-    bringerId: j['bringerId'] ?? '',
-    forIds: _strings(j['forIds']),
+    personal: j['personal'] ?? false,
   );
 }
 
@@ -490,6 +586,38 @@ class Trip {
     return result;
   }
 
+  /// Adds a template's items, skipping ones already on the matching list.
+  /// Personal items go on [ownerId]'s list. Returns how many were added.
+  int applyTemplate(GearTemplate template, {required String? ownerId}) {
+    var added = 0;
+    for (final t in template.items) {
+      if (t.personal && ownerId == null) continue;
+      final exists = gear.any(
+        (g) =>
+            g.name.toLowerCase() == t.name.toLowerCase() &&
+            g.personal == t.personal &&
+            (!t.personal || g.bringerId == ownerId),
+      );
+      if (exists) continue;
+      gear.add(
+        t.personal
+            ? GearItem.personalFor(
+                ownerId!,
+                name: t.name,
+                category: t.category,
+                quantity: t.quantity,
+              )
+            : GearItem(
+                name: t.name,
+                category: t.category,
+                quantity: t.quantity,
+              ),
+      );
+      added++;
+    }
+    return added;
+  }
+
   /// Removes references to a camper who is being deleted.
   void forgetCamper(String id) {
     for (final c in costs) {
@@ -499,6 +627,7 @@ class Trip {
     for (final m in meals) {
       m.cookIds.remove(id);
     }
+    gear.removeWhere((g) => g.personal && g.bringerId == id);
     for (final g in gear) {
       if (g.bringerId == id) g.bringerId = '';
       g.forIds.remove(id);

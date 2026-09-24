@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'services/auth_service.dart';
+import 'services/settings_service.dart';
 import 'store.dart';
 
 /// Makes the [TripStore] available to the widget tree and rebuilds
@@ -12,6 +14,25 @@ class StoreScope extends InheritedNotifier<TripStore> {
 
   static TripStore of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<StoreScope>()!.notifier!;
+}
+
+class AuthScope extends InheritedNotifier<AuthService> {
+  const AuthScope({super.key, required AuthService auth, required super.child})
+    : super(notifier: auth);
+
+  static AuthService of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AuthScope>()!.notifier!;
+}
+
+class SettingsScope extends InheritedNotifier<SettingsService> {
+  const SettingsScope({
+    super.key,
+    required SettingsService settings,
+    required super.child,
+  }) : super(notifier: settings);
+
+  static SettingsService of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SettingsScope>()!.notifier!;
 }
 
 const _months = [

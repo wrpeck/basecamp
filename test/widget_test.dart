@@ -1,14 +1,11 @@
-import 'package:basecamp/main.dart';
-import 'package:basecamp/store.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'test_app.dart';
 
 void main() {
   testWidgets('shows the sample trip and opens it', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final store = TripStore();
-    await store.load();
-    await tester.pumpWidget(BasecampApp(store: store));
+    final (app, store, _) = await makeTestApp();
+    await tester.pumpWidget(app);
     expect(find.text('Big Sur Weekend'), findsOneWidget);
 
     await tester.tap(find.text('Big Sur Weekend'));

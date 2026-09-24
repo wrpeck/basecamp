@@ -4,6 +4,7 @@ import '../models.dart';
 import '../sample_data.dart';
 import '../util.dart';
 import '../widgets/form_sheet.dart';
+import 'account_screen.dart';
 import 'trip_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -82,6 +83,7 @@ class HomeScreen extends StatelessWidget {
                 const Text('Basecamp'),
               ],
             ),
+            actions: const [_AccountButton(), SizedBox(width: 8)],
           ),
           if (trips.isEmpty)
             SliverFillRemaining(
@@ -394,6 +396,37 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Opens account & settings; shows the signed-in user's initials.
+class _AccountButton extends StatelessWidget {
+  const _AccountButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = AuthScope.of(context).currentUser;
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: 'Account & settings',
+      onPressed: () =>
+          Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const AccountScreen())),
+      icon: user == null
+          ? const Icon(Icons.account_circle_outlined, size: 30)
+          : CircleAvatar(
+              radius: 16,
+              backgroundColor: scheme.primary,
+              foregroundColor: scheme.onPrimary,
+              child: Text(
+                user.initials,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
     );
   }
 }
