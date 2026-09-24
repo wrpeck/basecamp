@@ -19,6 +19,6 @@ void main() {
       await tester.tap(find.text(tab).last);
       await tester.pumpAndSettle();
     }
-    expect(find.text('Alex Rivera'), findsOneWidget);
+    expect(find.text('Jordan Lee'), findsOneWidget);
   });
 }

@@ -51,6 +51,13 @@ String fmtMoney(double v) {
   return '\$$whole.${parts[1]}';
 }
 
+/// Parses "12", "\$12.50" or "1,200.00"; null when there's no number.
+double? parseMoney(String s) {
+  final cleaned = s.replaceAll(RegExp(r'[^\d.]'), '');
+  final v = double.tryParse(cleaned);
+  return v == null || v < 0 ? null : v;
+}
+
 String countdownLabel(int days, int dayCount) {
   if (days > 1) return 'In $days days';
   if (days == 1) return 'Tomorrow';
@@ -95,6 +102,43 @@ Future<void> copyText(BuildContext context, String text, String what) async {
   messenger.showSnackBar(SnackBar(content: Text('$what copied')));
 }
 
+String fmtTime(int minutes) {
+  final h = minutes ~/ 60, m = minutes % 60;
+  final h12 = h % 12 == 0 ? 12 : h % 12;
+  return '$h12:${m.toString().padLeft(2, '0')} ${h < 12 ? 'AM' : 'PM'}';
+}
+
+/// Parses coordinates typed or pasted in common formats:
+/// "36.2508, -121.7847", "36.2508 N 121.7847 W" or "36°15'03\"N 121°47'05\"W".
+(double, double)? parseCoords(String text) {
+  final token = RegExp(
+    r'([-+−]?\d+(?:[.,]\d+)?)\s*°?\s*'
+    r"(?:(\d+(?:[.,]\d+)?)\s*['′’]\s*)?"
+    r'(?:(\d+(?:[.,]\d+)?)\s*(?:["″”]|'
+    "''"
+    r'|’’)\s*)?'
+    r'([NSEWnsew])?',
+  );
+  double? num(String? s) => s == null
+      ? null
+      : double.tryParse(s.replaceAll(',', '.').replaceAll('−', '-'));
+  final parts = token.allMatches(text).where((m) => m[1] != null).toList();
+  final values = <(double, String?)>[];
+  for (final m in parts) {
+    var v = num(m[1])!;
+    final sign = v.isNegative ? -1 : 1;
+    v = v.abs() + (num(m[2]) ?? 0) / 60 + (num(m[3]) ?? 0) / 3600;
+    values.add((v * sign, m[4]?.toUpperCase()));
+  }
+  if (values.length < 2) return null;
+  double apply((double, String?) v) =>
+      (v.$2 == 'S' || v.$2 == 'W') ? -v.$1.abs() : v.$1;
+  var lat = apply(values[0]), lng = apply(values[1]);
+  if (values[0].$2 == 'E' || values[0].$2 == 'W') (lat, lng) = (lng, lat);
+  if (lat.abs() > 90 || lng.abs() > 180) return null;
+  return (lat, lng);
+}
+
 String fmtCoord(double lat, double lng) {
   String one(double v, String pos, String neg) =>
       '${v.abs().toStringAsFixed(4)}° ${v >= 0 ? pos : neg}';
@@ -123,7 +167,10 @@ IconData gearIcon(String category) => switch (category) {
 IconData activityIcon(String kind) => switch (kind) {
   'Hike' => Icons.hiking,
   'Day trip' => Icons.directions_car_outlined,
-  'Water' => Icons.kayaking,
+  'Water Sports' => Icons.kayaking,
+  'Biking' => Icons.directions_bike,
+  'Climbing' => Icons.terrain_outlined,
+  'Stargazing' => Icons.nights_stay_outlined,
   'Camp' => Icons.local_fire_department_outlined,
   'Sightseeing' => Icons.photo_camera_outlined,
   _ => Icons.explore_outlined,

@@ -4,34 +4,29 @@ import '../models.dart';
 import '../util.dart';
 import '../widgets/common.dart';
 import '../widgets/form_sheet.dart';
+import 'meals_tab.dart' show dayOptions;
+
+/// One row on the day timeline: either an activity or a travel milestone.
+class _Entry {
+  _Entry.activity(Activity this.activity)
+    : time = activity.time,
+      title = activity.title,
+      travel = false;
+  _Entry.travel(this.time, this.title) : activity = null, travel = true;
+
+  final Activity? activity;
+  final int? time;
+  final String title;
+  final bool travel;
+}
 
 class PlansTab extends StatelessWidget {
   const PlansTab({super.key, required this.trip});
 
   final Trip trip;
 
-  List<String> get _dayOptions => [
-    for (var d = 0; d < trip.dayCount; d++)
-      'Day ${d + 1} · ${fmtDayLabel(trip.dateForDay(d))}',
-  ];
-
-  /// Sort key that understands times like "8:30 AM"; untimed items go last.
-  static int _minutes(String t) {
-    final m = RegExp(
-      r'(\d{1,2})(?::(\d{2}))?\s*([ap]m)?',
-      caseSensitive: false,
-    ).firstMatch(t);
-    if (m == null) return 24 * 60;
-    var h = int.parse(m[1]!) % 12;
-    final min = int.tryParse(m[2] ?? '') ?? 0;
-    final pm = (m[3] ?? '').toLowerCase() == 'pm';
-    if (m[3] == null) h = int.parse(m[1]!);
-    return (pm ? h + 12 : h) * 60 + min;
-  }
-
   Future<void> _edit(BuildContext context, [Activity? a, int? day]) async {
     final store = StoreScope.of(context);
-    final days = _dayOptions;
     final v = await showFormSheet(
       context,
       title: a == null ? 'Add activity' : 'Edit activity',
@@ -39,7 +34,7 @@ class PlansTab extends StatelessWidget {
           ? null
           : () => store.update(() => trip.activities.remove(a)),
       fields: [
-        FieldSpec(
+        FieldSpec.text(
           'title',
           'What',
           initial: a?.title ?? '',
@@ -47,74 +42,73 @@ class PlansTab extends StatelessWidget {
           required: true,
           icon: Icons.flag_outlined,
         ),
-        FieldSpec(
+        FieldSpec.choice(
           'kind',
           'Type',
+          options: plainOptions(activityKinds),
           initial: a?.kind ?? 'Hike',
-          options: activityKinds,
         ),
-        FieldSpec(
+        FieldSpec.choice(
           'day',
           'Day',
-          initial: days[(a?.day ?? day ?? 0).clamp(0, days.length - 1)],
-          options: days,
+          options: dayOptions(trip),
+          initial: '${(a?.day ?? day ?? 0).clamp(0, trip.dayCount - 1)}',
         ),
-        FieldSpec(
-          'time',
-          'Time',
-          initial: a?.time ?? '',
-          hint: '9:00 AM',
-          icon: Icons.schedule,
-        ),
-        FieldSpec(
+        FieldSpec.time('time', 'Time', initial: a?.time),
+        FieldSpec.text(
           'location',
           'Where',
           initial: a?.location ?? '',
           hint: 'Trailhead, town, beach…',
           icon: Icons.place_outlined,
         ),
-        FieldSpec(
+        FieldSpec.text(
           'distance',
           'Distance / duration',
           initial: a?.distance ?? '',
           hint: '3.2 mi · 2 hrs',
           icon: Icons.straighten,
         ),
-        FieldSpec('notes', 'Notes', initial: a?.notes ?? '', maxLines: 3),
+        FieldSpec.text('notes', 'Notes', initial: a?.notes ?? '', maxLines: 3),
       ],
     );
     if (v == null) return;
-    final d = days.indexOf(v['day']!);
     store.update(() {
-      if (a == null) {
-        trip.activities.add(
-          Activity(
-            day: d,
-            title: v['title']!,
-            kind: v['kind']!,
-            time: v['time']!,
-            location: v['location']!,
-            distance: v['distance']!,
-            notes: v['notes']!,
-          ),
-        );
-      } else {
-        a
-          ..title = v['title']!
-          ..kind = v['kind']!
-          ..day = d
-          ..time = v['time']!
-          ..location = v['location']!
-          ..distance = v['distance']!
-          ..notes = v['notes']!;
-      }
+      final target = a ?? Activity(day: 0, title: '');
+      target
+        ..title = v.str('title')
+        ..kind = v.str('kind')
+        ..day = int.parse(v.str('day'))
+        ..time = v.time('time')
+        ..location = v.str('location')
+        ..distance = v.str('distance')
+        ..notes = v.str('notes');
+      if (a == null) trip.activities.add(target);
     });
+  }
+
+  List<_Entry> _entriesFor(int day) {
+    final last = trip.dayCount - 1;
+    final entries = [
+      for (final a in trip.activities.where((a) => a.day == day))
+        _Entry.activity(a),
+      if (day == 0 && trip.leaveHomeBy != null)
+        _Entry.travel(trip.leaveHomeBy, 'Leave home'),
+      if (day == 0 && trip.arriveCampBy != null)
+        _Entry.travel(trip.arriveCampBy, 'Arrive at camp'),
+      if (day == last && trip.leaveCampBy != null)
+        _Entry.travel(trip.leaveCampBy, 'Leave camp'),
+      if (day == last && trip.arriveHomeBy != null)
+        _Entry.travel(trip.arriveHomeBy, 'Arrive home'),
+    ];
+    // Untimed activities go last.
+    entries.sort((x, y) => (x.time ?? 24 * 60).compareTo(y.time ?? 24 * 60));
+    return entries;
   }
 
   @override
   Widget build(BuildContext context) {
     StoreScope.of(context);
-    final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
@@ -129,38 +123,28 @@ class PlansTab extends StatelessWidget {
           for (var d = 0; d < trip.dayCount; d++) ...[
             DayHeader(day: d, label: fmtDayLabel(trip.dateForDay(d))),
             ...() {
-              final items = trip.activities.where((a) => a.day == d).toList()
-                ..sort((x, y) => _minutes(x.time).compareTo(_minutes(y.time)));
-              if (items.isEmpty) {
-                return [
-                  OutlinedButton.icon(
-                    onPressed: () => _edit(context, null, d),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Plan something'),
-                  ),
-                ];
-              }
+              final items = _entriesFor(d);
               return [
                 for (var i = 0; i < items.length; i++)
                   _TimelineItem(
-                    activity: items[i],
+                    entry: items[i],
                     isLast: i == items.length - 1,
-                    onTap: () => _edit(context, items[i]),
+                    onTap: items[i].activity == null
+                        ? null
+                        : () => _edit(context, items[i].activity),
+                  ),
+                if (!items.any((e) => !e.travel))
+                  Padding(
+                    padding: EdgeInsets.only(left: items.isEmpty ? 0 : 50),
+                    child: OutlinedButton.icon(
+                      onPressed: () => _edit(context, null, d),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Plan something'),
+                    ),
                   ),
               ];
             }(),
           ],
-          if (trip.activities.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 24),
-              child: Text(
-                'Plan hikes, day trips, and camp activities for each day.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -169,21 +153,28 @@ class PlansTab extends StatelessWidget {
 
 class _TimelineItem extends StatelessWidget {
   const _TimelineItem({
-    required this.activity,
+    required this.entry,
     required this.isLast,
     required this.onTap,
   });
 
-  final Activity activity;
+  final _Entry entry;
   final bool isLast;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final a = activity;
+    final a = entry.activity;
+    final done = a?.done ?? false;
+
+    final icon = entry.travel
+        ? Icons.directions_car_filled_outlined
+        : done
+        ? Icons.check
+        : activityIcon(a!.kind);
 
     return IntrinsicHeight(
       child: Row(
@@ -194,19 +185,22 @@ class _TimelineItem extends StatelessWidget {
             child: Column(
               children: [
                 GestureDetector(
-                  onTap: () => store.update(() => a.done = !a.done),
+                  onTap: a == null
+                      ? null
+                      : () => store.update(() => a.done = !a.done),
                   child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: a.done
+                    radius: entry.travel ? 14 : 18,
+                    backgroundColor: entry.travel
+                        ? scheme.tertiaryContainer
+                        : done
                         ? scheme.primary
                         : scheme.primaryContainer,
-                    foregroundColor: a.done
+                    foregroundColor: entry.travel
+                        ? scheme.onTertiaryContainer
+                        : done
                         ? scheme.onPrimary
                         : scheme.onPrimaryContainer,
-                    child: Icon(
-                      a.done ? Icons.check : activityIcon(a.kind),
-                      size: 20,
-                    ),
+                    child: Icon(icon, size: entry.travel ? 16 : 20),
                   ),
                 ),
                 if (!isLast)
@@ -224,63 +218,84 @@ class _TimelineItem extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Card(
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: onTap,
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+              child: entry.travel
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text.rich(
+                        TextSpan(
                           children: [
-                            if (a.time.isNotEmpty)
-                              Text(
-                                a.time,
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  color: scheme.tertiary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            if (a.time.isNotEmpty) const SizedBox(width: 8),
-                            Text(
-                              a.kind.toUpperCase(),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                letterSpacing: 1,
-                                color: scheme.onSurfaceVariant,
+                            TextSpan(text: '${entry.title} by '),
+                            TextSpan(
+                              text: fmtTime(entry.time!),
+                              style: TextStyle(
+                                color: scheme.tertiary,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          a.title,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            decoration: a.done
-                                ? TextDecoration.lineThrough
-                                : null,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    )
+                  : Card(
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: onTap,
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  if (a!.time != null) ...[
+                                    Text(
+                                      fmtTime(a.time!),
+                                      style: theme.textTheme.labelLarge
+                                          ?.copyWith(
+                                            color: scheme.tertiary,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Text(
+                                    a.kind.toUpperCase(),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      letterSpacing: 1,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                a.title,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  decoration: done
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                              ),
+                              if (a.location.isNotEmpty)
+                                _Meta(Icons.place_outlined, a.location),
+                              if (a.distance.isNotEmpty)
+                                _Meta(Icons.straighten, a.distance),
+                              if (a.notes.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  a.notes,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                        if (a.location.isNotEmpty)
-                          _Meta(Icons.place_outlined, a.location),
-                        if (a.distance.isNotEmpty)
-                          _Meta(Icons.straighten, a.distance),
-                        if (a.notes.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            a.notes,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ),
             ),
           ),
         ],

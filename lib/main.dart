@@ -1,4 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
+import 'platform/safe_insets.dart';
 
 import 'screens/home_screen.dart';
 import 'store.dart';
@@ -79,8 +83,32 @@ class BasecampApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: _theme(Brightness.light),
         darkTheme: _theme(Brightness.dark),
+        builder: (context, child) => _withHostInsets(context, child!),
         home: const HomeScreen(),
       ),
+    );
+  }
+
+  /// Merges safe-area insets reported by the host web view into
+  /// [MediaQuery] so app bars, sheets, dialogs and menus avoid system UI.
+  static Widget _withHostInsets(BuildContext context, Widget child) {
+    final mq = MediaQuery.of(context);
+    var host = hostSafeInsets();
+    if (host == EdgeInsets.zero) return child;
+    // The keyboard already covers the bottom inset while it is open.
+    if (mq.viewInsets.bottom > 0) host = host.copyWith(bottom: 0);
+    EdgeInsets merge(EdgeInsets a) => EdgeInsets.fromLTRB(
+      math.max(a.left, host.left),
+      math.max(a.top, host.top),
+      math.max(a.right, host.right),
+      math.max(a.bottom, host.bottom),
+    );
+    return MediaQuery(
+      data: mq.copyWith(
+        padding: merge(mq.padding),
+        viewPadding: merge(mq.viewPadding),
+      ),
+      child: child,
     );
   }
 }

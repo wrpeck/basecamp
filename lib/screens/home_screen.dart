@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../sample_data.dart';
 import '../util.dart';
 import '../widgets/form_sheet.dart';
 import 'trip_screen.dart';
@@ -15,14 +16,14 @@ class HomeScreen extends StatelessWidget {
       title: 'New trip',
       submitLabel: 'Choose dates',
       fields: const [
-        FieldSpec(
+        FieldSpec.text(
           'name',
           'Trip name',
           hint: 'e.g. Yosemite Labor Day',
           required: true,
           icon: Icons.flag_outlined,
         ),
-        FieldSpec(
+        FieldSpec.text(
           'campground',
           'Campground',
           hint: 'e.g. Upper Pines',
@@ -33,22 +34,21 @@ class HomeScreen extends StatelessWidget {
     if (values == null || !context.mounted) return;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final range = await showDateRangePicker(
-      context: context,
+    final range = await pickTripDates(
+      context,
       firstDate: today.subtract(const Duration(days: 365)),
       lastDate: today.add(const Duration(days: 365 * 3)),
-      initialDateRange: DateTimeRange(
+      initial: DateTimeRange(
         start: today.add(const Duration(days: 14)),
         end: today.add(const Duration(days: 16)),
       ),
-      helpText: 'Trip dates',
     );
     if (range == null || !context.mounted) return;
-    final trip = Trip(
-      name: values['name']!,
-      campground: values['campground']!,
-      startDate: range.start,
-      endDate: range.end,
+    final trip = newTrip(
+      name: values.str('name'),
+      campground: values.str('campground'),
+      start: range.start,
+      end: range.end,
     );
     store.addTrip(trip);
     Navigator.of(context)
@@ -160,11 +160,14 @@ class TripCard extends StatelessWidget {
                     children: [
                       Icon(Icons.event, size: 18, color: scheme.primary),
                       const SizedBox(width: 6),
-                      Text(
-                        fmtRange(trip.startDate, trip.endDate),
-                        style: theme.textTheme.bodyMedium,
+                      Expanded(
+                        child: Text(
+                          fmtRange(trip.startDate, trip.endDate),
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium,
+                        ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       Text(
                         countdownLabel(days, trip.dayCount),
                         style: theme.textTheme.labelLarge?.copyWith(

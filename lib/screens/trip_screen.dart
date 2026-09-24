@@ -47,7 +47,7 @@ class _TripScreenState extends State<TripScreen> {
                   context,
                   title: 'Rename trip',
                   fields: [
-                    FieldSpec(
+                    FieldSpec.text(
                       'name',
                       'Trip name',
                       initial: trip.name,
@@ -56,7 +56,7 @@ class _TripScreenState extends State<TripScreen> {
                   ],
                 );
                 if (values != null) {
-                  store.update(() => trip.name = values['name']!);
+                  store.update(() => trip.name = values.str('name'));
                 }
               } else if (v == 'delete') {
                 final ok = await confirm(

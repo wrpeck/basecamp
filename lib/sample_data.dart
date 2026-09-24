@@ -1,11 +1,50 @@
 import 'models.dart';
 
+/// Every new trip starts with "Me" on the crew.
+Trip newTrip({
+  required String name,
+  required String campground,
+  required DateTime start,
+  required DateTime end,
+}) => Trip(
+  name: name,
+  campground: campground,
+  startDate: start,
+  endDate: end,
+  campers: [Camper(name: 'Me', isMe: true)],
+);
+
 /// A fully filled-in example trip so the app has something to show on first
 /// launch. Dates float relative to today so the countdown stays meaningful.
 Trip sampleTrip() {
   final now = DateTime.now();
   final start = DateTime(now.year, now.month, now.day + 21);
   final end = start.add(const Duration(days: 2));
+
+  final me = Camper(name: 'Me', isMe: true, role: 'Trip lead · Driver');
+  final jordan = Camper(
+    name: 'Jordan Lee',
+    phone: '(555) 318-2210',
+    email: 'jordan@example.com',
+    role: 'Camp chef',
+    emergencyContact: 'Chris Lee (555) 318-7788',
+    notes: 'Vegetarian',
+  );
+  final sam = Camper(
+    name: 'Sam Patel',
+    phone: '(555) 442-0917',
+    email: 'sam@example.com',
+    role: 'Fire & water',
+  );
+  final riley = Camper(
+    name: 'Riley Chen',
+    phone: '(555) 660-3381',
+    email: 'riley@example.com',
+    role: 'Navigator · Driver',
+    notes: 'Allergic to peanuts',
+  );
+
+  int t(int h, [int m = 0]) => h * 60 + m;
 
   return Trip(
     name: 'Big Sur Weekend',
@@ -16,59 +55,58 @@ Trip sampleTrip() {
     address: '47225 CA-1, Big Sur, CA 93920',
     latitude: 36.2508,
     longitude: -121.7847,
-    checkIn: '2:00 PM',
-    checkOut: '12:00 PM',
+    checkIn: t(14),
+    checkOut: t(12),
     reservationNumber: 'RC-48213-77',
-    parking:
-        '2 vehicles allowed at site. Extra cars park in the day-use lot by '
-        'the lodge (\$10/day, pay at kiosk).',
-    rangerPhone: '(831) 667-2315',
+    water: 'Potable water at site',
+    bathrooms: 'Flush toilets & showers',
+    cellService: false,
+    vehiclesAllowed: 2,
+    costPerVehicle: 10,
+    parkingNotes:
+        'Extra cars park in the day-use lot by the lodge. Pay at the kiosk.',
+    leaveHomeBy: t(9),
+    arriveCampBy: t(14),
+    leaveCampBy: t(11, 30),
+    arriveHomeBy: t(16),
     notes:
         'Quiet hours 10 PM – 6 AM. Fires only in the site ring. '
-        'No cell service past Carmel – download offline maps!',
+        'Download offline maps before Carmel!',
+    campers: [me, jordan, sam, riley],
     costs: [
-      CostItem(label: 'Campsite (2 nights)', amount: 140, paidBy: 'Alex'),
-      CostItem(label: 'Groceries', amount: 186.40, paidBy: 'Jordan'),
-      CostItem(label: 'Firewood & ice', amount: 32, paidBy: 'Sam'),
-      CostItem(label: 'Extra vehicle parking', amount: 20, paidBy: 'Riley'),
-    ],
-    campers: [
-      Camper(
-        name: 'Alex Rivera',
-        phone: '(555) 201-4432',
-        email: 'alex@example.com',
-        role: 'Trip lead · Driver',
-        emergencyContact: 'Maria Rivera (555) 201-9000',
+      CostItem(
+        label: 'Campsite (2 nights)',
+        amount: 140,
+        payerIds: [me.id],
+        owedByEveryone: true,
       ),
-      Camper(
-        name: 'Jordan Lee',
-        phone: '(555) 318-2210',
-        email: 'jordan@example.com',
-        role: 'Camp chef',
-        emergencyContact: 'Chris Lee (555) 318-7788',
-        notes: 'Vegetarian',
+      CostItem(
+        label: 'Groceries',
+        amount: 186.40,
+        payerIds: [jordan.id, sam.id],
+        owedByEveryone: true,
       ),
-      Camper(
-        name: 'Sam Patel',
-        phone: '(555) 442-0917',
-        email: 'sam@example.com',
-        role: 'Fire & water',
+      CostItem(
+        label: 'Extra vehicle parking',
+        amount: 20,
+        payerIds: [riley.id],
+        owedIds: [riley.id, sam.id],
       ),
-      Camper(
-        name: 'Riley Chen',
-        phone: '(555) 660-3381',
-        email: 'riley@example.com',
-        role: 'Navigator · Driver',
-        notes: 'Allergic to peanuts',
-      ),
+      CostItem(label: 'My trail snacks', amount: 18.50, payerIds: [me.id]),
     ],
     meals: [
+      Meal(
+        day: 0,
+        type: 'Lunch',
+        provision: provisionSelf,
+        notes: 'Eat on the drive down',
+      ),
       Meal(
         day: 0,
         type: 'Dinner',
         title: 'Foil-packet fajitas',
         ingredients: ['Tortillas', 'Peppers', 'Onions', 'Chicken', 'Salsa'],
-        cook: 'Jordan',
+        cookIds: [jordan.id, riley.id],
       ),
       Meal(
         day: 0,
@@ -81,7 +119,7 @@ Trip sampleTrip() {
         type: 'Breakfast',
         title: 'Skillet pancakes & bacon',
         ingredients: ['Pancake mix', 'Bacon', 'Maple syrup', 'Coffee'],
-        cook: 'Alex',
+        cookIds: [me.id],
       ),
       Meal(
         day: 1,
@@ -94,30 +132,43 @@ Trip sampleTrip() {
         type: 'Dinner',
         title: 'Campfire chili',
         ingredients: ['Beans', 'Ground beef', 'Tomatoes', 'Cornbread mix'],
-        cook: 'Sam',
+        cookIds: [sam.id],
       ),
       Meal(
         day: 2,
         type: 'Breakfast',
         title: 'Breakfast burritos',
         ingredients: ['Eggs', 'Potatoes', 'Cheese', 'Tortillas'],
-        cook: 'Riley',
+        cookIds: [riley.id],
       ),
+      Meal(day: 2, type: 'Lunch', provision: provisionNone),
     ],
     gear: [
       GearItem(
         name: '4-person tent',
         category: 'Shelter',
-        bringer: 'Alex',
+        bringerId: me.id,
         packed: true,
       ),
       GearItem(
         name: 'Rain fly & stakes',
         category: 'Shelter',
-        bringer: 'Alex',
+        bringerId: me.id,
         packed: true,
       ),
-      GearItem(name: 'Pop-up canopy', category: 'Shelter', bringer: 'Sam'),
+      GearItem(name: 'Pop-up canopy', category: 'Shelter', bringerId: sam.id),
+      GearItem(
+        name: 'Camp chairs',
+        category: 'Fun',
+        quantity: 3,
+        bringerId: me.id,
+      ),
+      GearItem(
+        name: 'Camp chair',
+        category: 'Fun',
+        bringerId: me.id,
+        forIds: [me.id],
+      ),
       GearItem(
         name: 'Sleeping bags',
         category: 'Sleep',
@@ -128,19 +179,19 @@ Trip sampleTrip() {
       GearItem(
         name: 'Camp stove + fuel',
         category: 'Kitchen',
-        bringer: 'Jordan',
+        bringerId: jordan.id,
         packed: true,
       ),
       GearItem(
         name: 'Cast iron skillet',
         category: 'Kitchen',
-        bringer: 'Jordan',
+        bringerId: jordan.id,
       ),
       GearItem(
         name: 'Cooler',
         category: 'Kitchen',
         quantity: 2,
-        bringer: 'Sam',
+        bringerId: sam.id,
       ),
       GearItem(name: 'Water jugs (5 gal)', category: 'Kitchen', quantity: 2),
       GearItem(name: 'Rain jackets', category: 'Clothing'),
@@ -148,28 +199,40 @@ Trip sampleTrip() {
       GearItem(
         name: 'First aid kit',
         category: 'Safety',
-        bringer: 'Riley',
+        bringerId: riley.id,
         packed: true,
       ),
       GearItem(name: 'Headlamps', category: 'Safety', quantity: 4),
       GearItem(name: 'Bear-proof food bin', category: 'Safety'),
-      GearItem(name: 'Hatchet', category: 'Tools', bringer: 'Sam'),
-      GearItem(name: 'Multi-tool', category: 'Tools'),
+      GearItem(name: 'Hatchet', category: 'Tools', bringerId: sam.id),
       GearItem(name: 'Sunscreen & bug spray', category: 'Personal'),
-      GearItem(name: 'Card games', category: 'Fun', bringer: 'Riley'),
+      GearItem(
+        name: 'Peanut-free snacks',
+        category: 'Personal',
+        bringerId: riley.id,
+        forIds: [riley.id],
+      ),
+      GearItem(name: 'Card games', category: 'Fun', bringerId: riley.id),
     ],
     activities: [
       Activity(
         day: 0,
         title: 'Set up camp & gather firewood',
         kind: 'Camp',
-        time: '3:00 PM',
+        time: t(15),
+      ),
+      Activity(
+        day: 0,
+        title: 'Stargazing at the meadow',
+        kind: 'Stargazing',
+        time: t(21),
+        notes: 'New moon weekend – bring a red light.',
       ),
       Activity(
         day: 1,
         title: 'Pfeiffer Falls & Valley View',
         kind: 'Hike',
-        time: '8:30 AM',
+        time: t(8, 30),
         location: 'Trailhead near the lodge',
         distance: '2.0 mi · 600 ft gain',
         notes: 'Bring water and snacks. Easy-moderate.',
@@ -178,7 +241,7 @@ Trip sampleTrip() {
         day: 1,
         title: 'McWay Falls overlook',
         kind: 'Day trip',
-        time: '1:00 PM',
+        time: t(13),
         location: 'Julia Pfeiffer Burns SP (15 min south)',
         distance: '0.6 mi round trip',
         notes: 'Day-use parking \$10. Great for photos.',
@@ -187,15 +250,15 @@ Trip sampleTrip() {
         day: 1,
         title: 'Sunset at Pfeiffer Beach',
         kind: 'Sightseeing',
-        time: '6:15 PM',
+        time: t(18, 15),
         location: 'Sycamore Canyon Rd',
         notes: 'Narrow road – no trailers. Look for the keyhole arch.',
       ),
       Activity(
         day: 2,
         title: 'Big Sur River swim',
-        kind: 'Water',
-        time: '10:00 AM',
+        kind: 'Water Sports',
+        time: t(9),
         location: 'River access by Loop B',
       ),
     ],

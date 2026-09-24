@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../models.dart';
+import 'form_sheet.dart';
+
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
@@ -7,6 +10,7 @@ class SectionCard extends StatelessWidget {
     required this.icon,
     required this.child,
     this.onEdit,
+    this.onHeaderTap,
     this.trailing,
   });
 
@@ -14,6 +18,9 @@ class SectionCard extends StatelessWidget {
   final IconData icon;
   final Widget child;
   final VoidCallback? onEdit;
+
+  /// Called when the header row is tapped. Defaults to [onEdit].
+  final VoidCallback? onHeaderTap;
   final Widget? trailing;
 
   @override
@@ -25,39 +32,43 @@ class SectionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 18,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onHeaderTap ?? onEdit,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 18,
+                      color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
-                ),
-                ?trailing,
-                if (onEdit != null)
-                  IconButton(
-                    tooltip: 'Edit $title',
-                    icon: const Icon(Icons.edit_outlined, size: 20),
-                    onPressed: onEdit,
-                  )
-                else
-                  const SizedBox(height: 48),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  ?trailing,
+                  if (onEdit != null)
+                    IconButton(
+                      tooltip: 'Edit $title',
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      onPressed: onEdit,
+                    )
+                  else
+                    const SizedBox(height: 48),
+                ],
+              ),
             ),
             const SizedBox(height: 4),
             Padding(padding: const EdgeInsets.only(right: 8), child: child),
@@ -125,31 +136,51 @@ class EmptyHint extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.message,
+    this.action,
   });
 
   final IconData icon;
   final String title;
   final String message;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 64, 32, 32),
-      child: Column(
-        children: [
-          Icon(icon, size: 56, color: theme.colorScheme.primary),
-          const SizedBox(height: 12),
-          Text(title, style: theme.textTheme.titleMedium),
-          const SizedBox(height: 6),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+    // Centered in whatever space the parent gives it, and still scrollable
+    // when that space is short (e.g. with the keyboard up).
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: constraints.maxWidth,
+            minHeight: constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 56, color: theme.colorScheme.primary),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (action != null) ...[const SizedBox(height: 20), action!],
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -195,10 +226,21 @@ class DayHeader extends StatelessWidget {
   }
 }
 
-/// Names that can be offered in "who" dropdowns.
-List<String> whoOptions(Iterable<String> names) => [
-  'Anyone',
-  ...names.where((n) => n.isNotEmpty),
+/// Crew members as options for choice and multi-select fields.
+List<Option> camperOptions(Trip trip) => [
+  for (final c in trip.campers) (value: c.id, label: c.firstName),
 ];
 
-String firstName(String full) => full.trim().split(RegExp(r'\s+')).first;
+/// "Everyone", "Anyone" or a list of first names for display.
+String namesOr(Trip trip, List<String> ids, String fallback) {
+  final names = trip.names(ids);
+  return names.isEmpty ? fallback : names.join(', ');
+}
+
+/// How to refer to a camper in sentences: "you" for me, else a first name.
+String who(Trip trip, String id, {bool capitalize = false}) {
+  final c = trip.camper(id);
+  if (c == null) return '?';
+  if (c.isMe) return capitalize ? 'You' : 'you';
+  return c.firstName;
+}

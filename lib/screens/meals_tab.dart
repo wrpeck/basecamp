@@ -5,6 +5,90 @@ import '../util.dart';
 import '../widgets/common.dart';
 import '../widgets/form_sheet.dart';
 
+List<Option> dayOptions(Trip trip) => [
+  for (var d = 0; d < trip.dayCount; d++)
+    (value: '$d', label: 'Day ${d + 1} · ${fmtDayLabel(trip.dateForDay(d))}'),
+];
+
+/// Add or edit a meal. Shared with the crew summary screen.
+Future<void> editMeal(
+  BuildContext context,
+  Trip trip, {
+  Meal? meal,
+  int? day,
+  String? type,
+}) async {
+  final store = StoreScope.of(context);
+  final v = await showFormSheet(
+    context,
+    title: meal == null ? 'Add meal' : 'Edit meal',
+    onDelete: meal == null
+        ? null
+        : () => store.update(() => trip.meals.remove(meal)),
+    fields: [
+      FieldSpec.choice(
+        'day',
+        'Day',
+        options: dayOptions(trip),
+        initial: '${(meal?.day ?? day ?? 0).clamp(0, trip.dayCount - 1)}',
+      ),
+      FieldSpec.choice(
+        'type',
+        'Meal',
+        options: plainOptions(mealTypes),
+        initial: meal?.type ?? type ?? 'Dinner',
+      ),
+      FieldSpec.choice(
+        'provision',
+        'Who provides it',
+        options: plainOptions(mealProvisions),
+        initial: meal?.provision ?? provisionGroup,
+        icon: Icons.groups_outlined,
+      ),
+      FieldSpec.text(
+        'title',
+        'Dish',
+        initial: meal?.title ?? '',
+        hint: 'Campfire chili (optional for N/A or self-provided)',
+        icon: Icons.restaurant_menu,
+      ),
+      FieldSpec.multi(
+        'cooks',
+        'Cooks',
+        options: camperOptions(trip),
+        initial: meal?.cookIds ?? const [],
+      ),
+      FieldSpec.text(
+        'ingredients',
+        'Ingredients',
+        initial: meal?.ingredients.join(', ') ?? '',
+        hint: 'Comma separated: beans, onions, cheese',
+        maxLines: 3,
+      ),
+      FieldSpec.text('notes', 'Notes', initial: meal?.notes ?? '', maxLines: 2),
+    ],
+  );
+  if (v == null) return;
+  final ingredients = v
+      .str('ingredients')
+      .split(RegExp(r'[,\n]'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+  store.update(() {
+    final target = meal ?? Meal(day: 0, type: 'Dinner');
+    target
+      ..day = int.parse(v.str('day'))
+      ..type = v.str('type')
+      ..provision = v.str('provision')
+      ..title = v.str('title')
+      ..cookIds = v.list('cooks')
+      ..ingredients = ingredients
+      ..notes = v.str('notes');
+    if (meal == null) trip.meals.add(target);
+  });
+}
+
 class MealsTab extends StatefulWidget {
   const MealsTab({super.key, required this.trip});
 
@@ -20,89 +104,6 @@ class _MealsTabState extends State<MealsTab> {
 
   Trip get trip => widget.trip;
 
-  List<String> get _dayOptions => [
-    for (var d = 0; d < trip.dayCount; d++)
-      'Day ${d + 1} · ${fmtDayLabel(trip.dateForDay(d))}',
-  ];
-
-  Future<void> _edit([Meal? meal, int? day, String? type]) async {
-    final store = StoreScope.of(context);
-    final days = _dayOptions;
-    final v = await showFormSheet(
-      context,
-      title: meal == null ? 'Add meal' : 'Edit meal',
-      onDelete: meal == null
-          ? null
-          : () => store.update(() => trip.meals.remove(meal)),
-      fields: [
-        FieldSpec(
-          'title',
-          'Meal',
-          initial: meal?.title ?? '',
-          hint: 'Campfire chili',
-          required: true,
-          icon: Icons.restaurant_menu,
-        ),
-        FieldSpec(
-          'day',
-          'Day',
-          initial: days[(meal?.day ?? day ?? 0).clamp(0, days.length - 1)],
-          options: days,
-        ),
-        FieldSpec(
-          'type',
-          'Type',
-          initial: meal?.type ?? type ?? 'Dinner',
-          options: mealTypes,
-        ),
-        FieldSpec(
-          'cook',
-          'Cook',
-          initial: meal?.cook ?? '',
-          options: whoOptions(trip.campers.map((c) => firstName(c.name))),
-        ),
-        FieldSpec(
-          'ingredients',
-          'Ingredients',
-          initial: meal?.ingredients.join(', ') ?? '',
-          hint: 'Comma separated: beans, onions, cheese',
-          maxLines: 3,
-        ),
-        FieldSpec('notes', 'Notes', initial: meal?.notes ?? '', maxLines: 2),
-      ],
-    );
-    if (v == null) return;
-    final ingredients = v['ingredients']!
-        .split(RegExp(r'[,\n]'))
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-    final dayIndex = days.indexOf(v['day']!);
-    final cook = v['cook'] == 'Anyone' ? '' : v['cook']!;
-    store.update(() {
-      if (meal == null) {
-        trip.meals.add(
-          Meal(
-            day: dayIndex,
-            type: v['type']!,
-            title: v['title']!,
-            ingredients: ingredients,
-            cook: cook,
-            notes: v['notes']!,
-          ),
-        );
-      } else {
-        meal
-          ..title = v['title']!
-          ..day = dayIndex
-          ..type = v['type']!
-          ..cook = cook
-          ..ingredients = ingredients
-          ..notes = v['notes']!;
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     StoreScope.of(context);
@@ -113,31 +114,33 @@ class _MealsTabState extends State<MealsTab> {
           : FloatingActionButton(
               heroTag: 'meal-fab',
               tooltip: 'Add meal',
-              onPressed: () => _edit(),
+              onPressed: () => editMeal(context, trip),
               child: const Icon(Icons.add),
             ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: SegmentedButton<bool>(
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.comfortable,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: Center(
+              child: SegmentedButton<bool>(
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.comfortable,
+                ),
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.calendar_view_day_outlined),
+                    label: Text('Meal plan'),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.shopping_cart_outlined),
+                    label: Text('Shopping list'),
+                  ),
+                ],
+                selected: {_shopping},
+                onSelectionChanged: (s) => setState(() => _shopping = s.first),
               ),
-              segments: const [
-                ButtonSegment(
-                  value: false,
-                  icon: Icon(Icons.calendar_view_day_outlined),
-                  label: Text('Meal plan'),
-                ),
-                ButtonSegment(
-                  value: true,
-                  icon: Icon(Icons.shopping_cart_outlined),
-                  label: Text('Shopping list'),
-                ),
-              ],
-              selected: {_shopping},
-              onSelectionChanged: (s) => setState(() => _shopping = s.first),
             ),
           ),
           Expanded(child: _shopping ? _shoppingList() : _plan()),
@@ -166,7 +169,11 @@ class _MealsTabState extends State<MealsTab> {
                 .toList();
             return [
               for (final m in meals) ...[
-                _MealCard(meal: m, onTap: () => _edit(m)),
+                _MealCard(
+                  trip: trip,
+                  meal: m,
+                  onTap: () => editMeal(context, trip, meal: m),
+                ),
                 const SizedBox(height: 8),
               ],
               if (missing.isNotEmpty)
@@ -181,7 +188,8 @@ class _MealsTabState extends State<MealsTab> {
                           color: theme.colorScheme.primary,
                         ),
                         label: Text(t),
-                        onPressed: () => _edit(null, d, t),
+                        onPressed: () =>
+                            editMeal(context, trip, day: d, type: t),
                       ),
                   ],
                 ),
@@ -197,6 +205,7 @@ class _MealsTabState extends State<MealsTab> {
     final counts = <String, int>{};
     final display = <String, String>{};
     for (final m in trip.meals) {
+      if (!m.isGroup) continue;
       for (final i in m.ingredients) {
         final k = i.toLowerCase();
         counts[k] = (counts[k] ?? 0) + 1;
@@ -260,8 +269,13 @@ class _MealsTabState extends State<MealsTab> {
 }
 
 class _MealCard extends StatelessWidget {
-  const _MealCard({required this.meal, required this.onTap});
+  const _MealCard({
+    required this.trip,
+    required this.meal,
+    required this.onTap,
+  });
 
+  final Trip trip;
   final Meal meal;
   final VoidCallback onTap;
 
@@ -269,8 +283,11 @@ class _MealCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final cooks = trip.names(meal.cookIds);
+    final muted = !meal.isGroup;
     return Card(
       clipBehavior: Clip.antiAlias,
+      color: muted ? scheme.surfaceContainerLow : null,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -279,30 +296,57 @@ class _MealCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                backgroundColor: scheme.tertiaryContainer,
-                foregroundColor: scheme.onTertiaryContainer,
-                child: Icon(mealIcon(meal.type)),
+                backgroundColor: muted
+                    ? scheme.surfaceContainerHighest
+                    : scheme.tertiaryContainer,
+                foregroundColor: muted
+                    ? scheme.onSurfaceVariant
+                    : scheme.onTertiaryContainer,
+                child: Icon(
+                  meal.provision == provisionNone
+                      ? Icons.do_not_disturb_alt
+                      : meal.provision == provisionSelf
+                      ? Icons.person_outline
+                      : mealIcon(meal.type),
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      meal.type.toUpperCase(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        letterSpacing: 1,
-                        color: scheme.tertiary,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          meal.type.toUpperCase(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            letterSpacing: 1,
+                            color: muted
+                                ? scheme.onSurfaceVariant
+                                : scheme.tertiary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (muted) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            meal.provision.toUpperCase(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              letterSpacing: 1,
+                              color: scheme.outline,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     Text(
-                      meal.title,
+                      meal.displayTitle,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
+                        color: muted ? scheme.onSurfaceVariant : null,
                       ),
                     ),
-                    if (meal.cook.isNotEmpty)
+                    if (cooks.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Row(
@@ -313,7 +357,12 @@ class _MealCard extends StatelessWidget {
                               color: scheme.onSurfaceVariant,
                             ),
                             const SizedBox(width: 4),
-                            Text(meal.cook, style: theme.textTheme.bodySmall),
+                            Expanded(
+                              child: Text(
+                                cooks.join(', '),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
                           ],
                         ),
                       ),

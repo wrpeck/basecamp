@@ -4,118 +4,126 @@ import '../models.dart';
 import '../util.dart';
 import '../widgets/common.dart';
 import '../widgets/form_sheet.dart';
+import 'camper_screen.dart';
+
+const avatarColors = [
+  Color(0xFF2F5D48),
+  Color(0xFFD9822B),
+  Color(0xFF4A6FA5),
+  Color(0xFF8C4A6B),
+  Color(0xFF6B7F3A),
+  Color(0xFFB5523B),
+];
+
+Color avatarColor(Trip trip, Camper c) =>
+    avatarColors[trip.campers.indexOf(c).clamp(0, 999) % avatarColors.length];
+
+/// Add or edit a camper. Returns true when the camper was deleted.
+Future<bool> editCamper(BuildContext context, Trip trip, [Camper? c]) async {
+  final store = StoreScope.of(context);
+  var deleted = false;
+  final v = await showFormSheet(
+    context,
+    title: c == null ? 'Add camper' : 'Edit ${c.isMe ? 'me' : c.firstName}',
+    onDelete: c == null
+        ? null
+        : () {
+            deleted = true;
+            store.update(() => trip.forgetCamper(c.id));
+          },
+    fields: [
+      FieldSpec.text(
+        'name',
+        'Name',
+        initial: c?.name ?? '',
+        required: true,
+        icon: Icons.person_outline,
+      ),
+      FieldSpec.text(
+        'role',
+        'Role',
+        initial: c?.role ?? '',
+        hint: 'Driver, chef, navigator…',
+        icon: Icons.badge_outlined,
+      ),
+      FieldSpec.text(
+        'phone',
+        'Phone',
+        initial: c?.phone ?? '',
+        keyboardType: TextInputType.phone,
+        icon: Icons.phone_outlined,
+      ),
+      FieldSpec.text(
+        'email',
+        'Email',
+        initial: c?.email ?? '',
+        keyboardType: TextInputType.emailAddress,
+        icon: Icons.email_outlined,
+      ),
+      FieldSpec.text(
+        'emergency',
+        'Emergency contact',
+        initial: c?.emergencyContact ?? '',
+        hint: 'Name and phone',
+        icon: Icons.emergency_outlined,
+      ),
+      FieldSpec.text(
+        'notes',
+        'Notes',
+        initial: c?.notes ?? '',
+        hint: 'Allergies, dietary needs…',
+        maxLines: 2,
+      ),
+    ],
+  );
+  if (deleted) return true;
+  if (v == null) return false;
+  store.update(() {
+    final target = c ?? Camper(name: '');
+    target
+      ..name = v.str('name')
+      ..role = v.str('role')
+      ..phone = v.str('phone')
+      ..email = v.str('email')
+      ..emergencyContact = v.str('emergency')
+      ..notes = v.str('notes');
+    if (c == null) trip.campers.add(target);
+  });
+  return false;
+}
 
 class CrewTab extends StatelessWidget {
   const CrewTab({super.key, required this.trip});
 
   final Trip trip;
 
-  static const _avatarColors = [
-    Color(0xFF2F5D48),
-    Color(0xFFD9822B),
-    Color(0xFF4A6FA5),
-    Color(0xFF8C4A6B),
-    Color(0xFF6B7F3A),
-    Color(0xFFB5523B),
-  ];
-
-  Future<void> _edit(BuildContext context, [Camper? c]) async {
-    final store = StoreScope.of(context);
-    final v = await showFormSheet(
-      context,
-      title: c == null ? 'Add camper' : 'Edit camper',
-      onDelete: c == null
-          ? null
-          : () => store.update(() => trip.campers.remove(c)),
-      fields: [
-        FieldSpec(
-          'name',
-          'Name',
-          initial: c?.name ?? '',
-          required: true,
-          icon: Icons.person_outline,
-        ),
-        FieldSpec(
-          'role',
-          'Role',
-          initial: c?.role ?? '',
-          hint: 'Driver, chef, navigator…',
-          icon: Icons.badge_outlined,
-        ),
-        FieldSpec(
-          'phone',
-          'Phone',
-          initial: c?.phone ?? '',
-          keyboardType: TextInputType.phone,
-          icon: Icons.phone_outlined,
-        ),
-        FieldSpec(
-          'email',
-          'Email',
-          initial: c?.email ?? '',
-          keyboardType: TextInputType.emailAddress,
-          icon: Icons.email_outlined,
-        ),
-        FieldSpec(
-          'emergency',
-          'Emergency contact',
-          initial: c?.emergencyContact ?? '',
-          hint: 'Name and phone',
-          icon: Icons.emergency_outlined,
-        ),
-        FieldSpec(
-          'notes',
-          'Notes',
-          initial: c?.notes ?? '',
-          hint: 'Allergies, dietary needs…',
-          maxLines: 2,
-        ),
-      ],
-    );
-    if (v == null) return;
-    store.update(() {
-      if (c == null) {
-        trip.campers.add(
-          Camper(
-            name: v['name']!,
-            role: v['role']!,
-            phone: v['phone']!,
-            email: v['email']!,
-            emergencyContact: v['emergency']!,
-            notes: v['notes']!,
-          ),
-        );
-      } else {
-        c
-          ..name = v['name']!
-          ..role = v['role']!
-          ..phone = v['phone']!
-          ..email = v['email']!
-          ..emergencyContact = v['emergency']!
-          ..notes = v['notes']!;
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    StoreScope.of(context);
+    final store = StoreScope.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final debts = trip.debts();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
         heroTag: 'crew-fab',
         tooltip: 'Add camper',
-        onPressed: () => _edit(context),
+        onPressed: () => editCamper(context, trip),
         child: const Icon(Icons.person_add_alt),
       ),
       body: trip.campers.isEmpty
-          ? const EmptyHint(
+          ? EmptyHint(
               icon: Icons.group_outlined,
               title: 'Who\'s coming?',
               message: 'Add campers with their contact info and roles.',
+              action: OutlinedButton.icon(
+                onPressed: () => store.update(
+                  () => trip.campers.insert(0, Camper(name: 'Me', isMe: true)),
+                ),
+                icon: const Icon(Icons.person_outline),
+                label: const Text('Add me'),
+              ),
             )
           : ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
@@ -123,19 +131,21 @@ class CrewTab extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, i) {
                 final c = trip.campers[i];
-                final color = _avatarColors[i % _avatarColors.length];
-                final bringing = trip.gear
-                    .where((g) => g.bringer == firstName(c.name))
-                    .length;
-                final cooking = trip.meals
-                    .where((m) => m.cook == firstName(c.name))
-                    .length;
+                final owes = debts.where((d) => d.from == c.id).toList();
+                final owed = debts
+                    .where((d) => d.to == c.id)
+                    .fold(0.0, (s, d) => s + d.amount);
                 return Card(
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
-                    onTap: () => _edit(context, c),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            CamperScreen(tripId: trip.id, camperId: c.id),
+                      ),
+                    ),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 12, 14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -143,7 +153,7 @@ class CrewTab extends StatelessWidget {
                             children: [
                               CircleAvatar(
                                 radius: 24,
-                                backgroundColor: color,
+                                backgroundColor: avatarColor(trip, c),
                                 foregroundColor: Colors.white,
                                 child: Text(
                                   c.initials,
@@ -157,12 +167,23 @@ class CrewTab extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      c.name,
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            c.name,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
                                           ),
+                                        ),
+                                        if (c.isMe) ...[
+                                          const SizedBox(width: 8),
+                                          const _YouBadge(),
+                                        ],
+                                      ],
                                     ),
                                     if (c.role.isNotEmpty)
                                       Text(
@@ -175,94 +196,68 @@ class CrewTab extends StatelessWidget {
                                   ],
                                 ),
                               ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    fmtMoney(trip.costFor(c.id)),
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    'trip cost',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: scheme.onSurfaceVariant,
+                              ),
                             ],
                           ),
-                          if (c.phone.isNotEmpty || c.email.isNotEmpty) ...[
+                          if (owes.isNotEmpty || owed > 0) ...[
                             const SizedBox(height: 12),
                             Wrap(
                               spacing: 8,
-                              runSpacing: 8,
+                              runSpacing: 6,
                               children: [
-                                if (c.phone.isNotEmpty) ...[
-                                  ActionChip(
-                                    avatar: const Icon(Icons.call, size: 16),
-                                    label: Text(c.phone),
-                                    onPressed: () =>
-                                        callNumber(context, c.phone),
+                                for (final d in owes)
+                                  _BalanceChip(
+                                    text:
+                                        'Owes ${who(trip, d.to)} ${fmtMoney(d.amount)}',
+                                    negative: true,
                                   ),
-                                  ActionChip(
-                                    avatar: const Icon(
-                                      Icons.sms_outlined,
-                                      size: 16,
-                                    ),
-                                    label: const Text('Text'),
-                                    onPressed: () =>
-                                        textNumber(context, c.phone),
-                                  ),
-                                ],
-                                if (c.email.isNotEmpty)
-                                  ActionChip(
-                                    avatar: const Icon(
-                                      Icons.email_outlined,
-                                      size: 16,
-                                    ),
-                                    label: Text(c.email),
-                                    onPressed: () =>
-                                        sendEmail(context, c.email),
+                                if (owed > 0)
+                                  _BalanceChip(
+                                    text: 'Is owed ${fmtMoney(owed)}',
+                                    negative: false,
                                   ),
                               ],
                             ),
                           ],
-                          if (c.emergencyContact.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            Row(
+                          if (c.phone.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
                               children: [
-                                Icon(
-                                  Icons.emergency_outlined,
-                                  size: 16,
-                                  color: scheme.error,
+                                ActionChip(
+                                  avatar: const Icon(Icons.call, size: 16),
+                                  label: Text(c.phone),
+                                  onPressed: () => callNumber(context, c.phone),
                                 ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'Emergency: ${c.emergencyContact}',
-                                    style: theme.textTheme.bodySmall,
+                                ActionChip(
+                                  avatar: const Icon(
+                                    Icons.sms_outlined,
+                                    size: 16,
                                   ),
+                                  label: const Text('Text'),
+                                  onPressed: () => textNumber(context, c.phone),
                                 ),
                               ],
-                            ),
-                          ],
-                          if (c.notes.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline,
-                                  size: 16,
-                                  color: scheme.tertiary,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    c.notes,
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (bringing > 0 || cooking > 0) ...[
-                            const Divider(height: 24),
-                            Text(
-                              [
-                                if (bringing > 0)
-                                  'Bringing $bringing item${bringing == 1 ? '' : 's'}',
-                                if (cooking > 0)
-                                  'Cooking $cooking meal${cooking == 1 ? '' : 's'}',
-                              ].join(' · '),
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: scheme.primary,
-                              ),
                             ),
                           ],
                         ],
@@ -272,6 +267,56 @@ class CrewTab extends StatelessWidget {
                 );
               },
             ),
+    );
+  }
+}
+
+class _YouBadge extends StatelessWidget {
+  const _YouBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        'YOU',
+        style: TextStyle(
+          fontSize: 10,
+          letterSpacing: 1,
+          fontWeight: FontWeight.w700,
+          color: scheme.onSecondaryContainer,
+        ),
+      ),
+    );
+  }
+}
+
+class _BalanceChip extends StatelessWidget {
+  const _BalanceChip({required this.text, required this.negative});
+
+  final String text;
+  final bool negative;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final bg = negative ? scheme.errorContainer : scheme.primaryContainer;
+    final fg = negative ? scheme.onErrorContainer : scheme.onPrimaryContainer;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 13, color: fg, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
